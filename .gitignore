@@ -1,0 +1,40 @@
+# Binaries
+/bin/
+/build/
+/out/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go modules
+/go.sum
+/vendor/
+
+# IDE/editor settings
+*.idea/
+*.vscode/
+*.swp
+*.swo
+*.DS_Store
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test output
+coverage.out
+*.test
+
+# Mac / Linux system files
+*.DS_Store
+Thumbs.db

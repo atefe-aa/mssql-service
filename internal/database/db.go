@@ -1,64 +1,56 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
-	"net/url"
-
-	_ "github.com/microsoft/go-mssqldb"
 	"mssql-api/internal/config"
+
+	"gorm.io/driver/sqlserver"
+	"gorm.io/gorm"
 )
 
-type Database struct {
-	DB *sql.DB
-}
+func NewGormDatabase(cfg *config.Config) (*gorm.DB, error) {
+	// Build connection string
+	dsn := buildConnectionString(cfg)
 
-func NewDatabase(cfg *config.Config) (*Database, error) {
-	connString := buildConnectionString(cfg)
-	
-	db, err := sql.Open("sqlserver", connString)
+	// Open connection using GORM
+	db, err := gorm.Open(sqlserver.Open(dsn), &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}
 
-	if err := db.Ping(); err != nil {
+	// Optional: ping the database to verify connectivity
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql.DB from gorm.DB: %w", err)
+	}
+
+	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	// Configure connection pool
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
 
-	return &Database{DB: db}, nil
+	return db, nil
 }
 
 func buildConnectionString(cfg *config.Config) string {
-	query := url.Values{}
-	query.Add("database", cfg.DBName)
-	query.Add("connection timeout", "30")
-	
-	var connString string
-	
 	if cfg.DBAuthMode == "windows" {
 		// Windows Authentication
-		connString = fmt.Sprintf("sqlserver://%s:%s?%s",
+		return fmt.Sprintf("sqlserver://%s:%s?database=%s&connection+timeout=30",
 			cfg.DBServer,
 			cfg.DBPort,
-			query.Encode())
+			cfg.DBName,
+		)
 	} else {
 		// SQL Authentication
-		u := &url.URL{
-			Scheme: "sqlserver",
-			User:   url.UserPassword(cfg.DBUser, cfg.DBPassword),
-			Host:   fmt.Sprintf("%s:%s", cfg.DBServer, cfg.DBPort),
-		}
-		u.RawQuery = query.Encode()
-		connString = u.String()
+		return fmt.Sprintf("sqlserver://%s:%s@%s:%s?database=%s&connection+timeout=30",
+			cfg.DBUser,
+			cfg.DBPassword,
+			cfg.DBServer,
+			cfg.DBPort,
+			cfg.DBName,
+		)
 	}
-	
-	return connString
-}
-
-func (d *Database) Close() error {
-	return d.DB.Close()
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -20,6 +22,8 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	godotenv.Load() 
+	
 	cfg := &Config{
 		DBServer:   getEnv("DB_SERVER", "localhost"),
 		DBPort:     getEnv("DB_PORT", "1433"),

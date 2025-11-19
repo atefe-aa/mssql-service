@@ -1,4 +1,3 @@
-// cmd/api/main.go
 package main
 
 import (
@@ -19,22 +18,28 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize database
-	db, err := database.NewDatabase(cfg)
+	// Initialize GORM database
+	db, err := database.NewGormDatabase(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+
+	// Optional: ping database
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Failed to get underlying sql.DB: %v", err)
+	}
+	defer sqlDB.Close() // Close underlying sql.DB when program exits
 
 	log.Println("Database connection established successfully")
 
-	// Initialize repository
-	repo := repository.NewRepository(db.DB)
+	// Initialize repository with *gorm.DB
+	repo := repository.NewRepository(db)
 
 	// Initialize handlers
 	handler := handlers.NewHandler(repo)
 
-	// Setup routes
+	// Setup HTTP routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handler.HealthCheck)
 	mux.HandleFunc("/api/barcode", handler.GetBarcodeRecords)
@@ -43,7 +48,7 @@ func main() {
 	addr := fmt.Sprintf(":%s", cfg.ServerPort)
 	log.Printf("Server starting on %s", addr)
 	log.Printf("Database: %s (auth mode: %s)", cfg.DBName, cfg.DBAuthMode)
-	
+
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
