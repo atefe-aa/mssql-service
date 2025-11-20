@@ -57,7 +57,7 @@ func main() {
 	log.Printf("Database: %s (auth mode: %s)", cfg.DBName, cfg.DBAuthMode)
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+		log.Printf("Server failed to start: %v", err)
 	}
 }
 
