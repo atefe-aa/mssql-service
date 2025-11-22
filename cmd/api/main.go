@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -10,13 +11,10 @@ import (
 	"mssql-api/internal/database"
 	"mssql-api/internal/handlers"
 	"mssql-api/internal/repository"
-
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
 )
 
 func main() {
+	// Log to file
 	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err == nil {
 		log.SetOutput(logFile)
@@ -24,91 +22,106 @@ func main() {
 		log.Println("Failed to open log file:", err)
 	}
 
-	showConfigGUI()
-
-	// Load configuration
+	// Load configuration (after .env exists)
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Printf("Config error: %v", err)
 	}
-
-	// Initialize GORM database
-	db, err := database.NewGormDatabase(cfg)
-	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
-	}
-
-	// Optional: ping database
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Fatalf("Failed to get underlying sql.DB: %v", err)
-	}
-	defer sqlDB.Close() // Close underlying sql.DB when program exits
-
-	log.Println("Database connection established successfully")
-
-	// Initialize repository with *gorm.DB
-	repo := repository.NewRepository(db)
-
-	// Initialize handlers
-	handler := handlers.NewHandler(repo)
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", handler.HealthCheck)
-	mux.HandleFunc("/api/barcode", handler.GetBarcodeRecords)
+
+	// CONFIG UI
+	mux.HandleFunc("/settings", settingsPage)
+	mux.HandleFunc("/settings/save", saveSettings)
+
+	// API
+	if cfg != nil {
+		db, err := database.NewGormDatabase(cfg)
+		if err == nil {
+			sqlDB, _ := db.DB()
+			defer sqlDB.Close()
+
+			repo := repository.NewRepository(db)
+			handler := handlers.NewHandler(repo)
+
+			mux.HandleFunc("/health", handler.HealthCheck)
+			mux.HandleFunc("/api/barcode", handler.GetBarcodeRecords)
+		}
+	}
 
 	// Start server
-	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Printf("Server starting on %s", addr)
-	log.Printf("Database: %s (auth mode: %s)", cfg.DBName, cfg.DBAuthMode)
+	port := "8080"
+	if cfg != nil {
+		port = cfg.ServerPort
+	}
+
+	addr := fmt.Sprintf(":%s", port)
+	log.Printf("Server running on %s", addr)
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Printf("Server failed to start: %v", err)
+		log.Printf("Server failed: %v", err)
 	}
 }
 
-func showConfigGUI() {
-	a := app.New()
-	w := a.NewWindow("Configure Database")
+func settingsPage(w http.ResponseWriter, r *http.Request) {
+	tpl := `
+<html>
+<body>
+<p>To use Windows Authentication:</p>
+<ul>
+<li>Ensure SQL Server allows Windows Authentication</li>
+<li>Check that the Windows account has login permissions</li>
+<li>Verify the account has access to the specific database</li>
+</ul>
+	<h2>Configure Database</h2>
+	<form action="/settings/save" method="POST">
+		DB Server: <input name="DB_SERVER"><br><br>
+		DB Port: <input name="DB_PORT" value="1433"><br><br>
+		DB Name: <input name="DB_NAME"><br><br>
+		Authentication Mode:
+		<select name="DB_AUTH_MODE">
+			<option value="windows">Windows</option>
+			<option value="sql">SQL</option>
+		</select><br><br>
+		DB User: <input name="DB_USER"><br><br>
+		DB Password: <input type="password" name="DB_PASSWORD"><br><br>
+		Server Port: <input name="SERVER_PORT" value="8080"><br><br>
+		<button type="submit">Save & Restart</button>
+	</form>
+</body>
+</html>
+`
+	t, _ := template.New("settings").Parse(tpl)
+	t.Execute(w, nil)
+}
 
-	server := widget.NewEntry()
-	server.SetPlaceHolder("DB_SERVER")
+func saveSettings(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
 
-	dbName := widget.NewEntry()
-	dbName.SetPlaceHolder("DB_NAME")
+	f, err := os.Create(".env")
+	if err != nil {
+		http.Error(w, "Failed to save .env", 500)
+		return
+	}
+	defer f.Close()
 
-	user := widget.NewEntry()
-	user.SetPlaceHolder("DB_USER")
+	fmt.Fprintf(f, `DB_SERVER=%s
+DB_PORT=%s
+DB_NAME=%s
+DB_AUTH_MODE=%s
+DB_USER=%s
+DB_PASSWORD=%s
+SERVER_PORT=%s
+`,
+		r.Form.Get("DB_SERVER"),
+		r.Form.Get("DB_PORT"),
+		r.Form.Get("DB_NAME"),
+		r.Form.Get("DB_AUTH_MODE"),
+		r.Form.Get("DB_USER"),
+		r.Form.Get("DB_PASSWORD"),
+		r.Form.Get("SERVER_PORT"),
+	)
 
-	pass := widget.NewPasswordEntry()
-	pass.SetPlaceHolder("DB_PASSWORD")
-
-	port := widget.NewEntry()
-	port.SetPlaceHolder("SERVER_PORT")
-	port.SetText("8080") // default
-
-	save := widget.NewButton("Save & Start Server", func() {
-		f, err := os.Create(".env")
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		defer f.Close()
-		fmt.Fprintf(f, "DB_SERVER=%s\nDB_NAME=%s\nDB_USER=%s\nDB_PASSWORD=%s\nSERVER_PORT=%s\n",
-			server.Text, dbName.Text, user.Text, pass.Text, port.Text)
-
-		w.Close() // close GUI and continue to start server
-	})
-
-	w.SetContent(container.NewVBox(
-		server,
-		dbName,
-		user,
-		pass,
-		port,
-		save,
-	))
-
-	w.ShowAndRun()
+	fmt.Fprintf(w, "Saved. Please restart the server manually.")
 }

@@ -38,7 +38,7 @@ func NewGormDatabase(cfg *config.Config) (*gorm.DB, error) {
 func buildConnectionString(cfg *config.Config) string {
 	if cfg.DBAuthMode == "windows" {
 		// Windows Authentication
-		return fmt.Sprintf("sqlserver://%s:%s?database=%s&connection+timeout=30",
+		return fmt.Sprintf("sqlserver://%s:%s?database=%s&connection+timeout=30&trusted_connection=yes",
 			cfg.DBServer,
 			cfg.DBPort,
 			cfg.DBName,
