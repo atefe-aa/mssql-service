@@ -45,7 +45,7 @@ func buildConnectionString(cfg *config.Config) string {
 		)
 	} else {
 		// SQL Authentication
-		return fmt.Sprintf("sqlserver://%s:%s@%s:%s?database=%s&connection+timeout=30",
+		return fmt.Sprintf("sqlserver://%s:%s@%s:%s?database=%s&connection+timeout=30&encrypt=disable",
 			cfg.DBUser,
 			cfg.DBPassword,
 			cfg.DBServer,
