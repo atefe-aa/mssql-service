@@ -33,7 +33,6 @@ func main() {
 		}
 	}
 
-	// Start server
 	port := "8080"
 	if cfg != nil {
 		port = cfg.ServerPort
