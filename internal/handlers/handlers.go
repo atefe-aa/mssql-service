@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"mssql-api/internal/config"
+	"mssql-edge/internal/config"
 	"net/http"
 	"strings"
 	"time"

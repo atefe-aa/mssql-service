@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"mssql-api/internal/config"
-	"mssql-api/internal/templates"
+	"mssql-edge/internal/config"
+	"mssql-edge/internal/templates"
 )
 
 type SettingsHandler struct {
@@ -26,6 +26,7 @@ type SettingsPageData struct {
 	ConnectionStatus  string
 	ConnectionError   string
 	ConnectionSuccess bool
+	APIKey            string
 }
 
 func (h *SettingsHandler) SettingsPage(w http.ResponseWriter, r *http.Request) {
@@ -36,14 +37,16 @@ func (h *SettingsHandler) SettingsPage(w http.ResponseWriter, r *http.Request) {
 		currentConfig = cfg
 	} else {
 		currentConfig = &config.Config{
-			GatewayUrl:   "",
+			GatewayUrl: "",
 			ServerPort: "8080",
+			APIKey:     "",
 		}
 	}
 
 	data := SettingsPageData{
 		Config:            currentConfig,
 		HasExistingConfig: err == nil && currentConfig.GatewayUrl != "",
+		APIKey:            currentConfig.APIKey,
 	}
 
 	if err != nil {
@@ -72,7 +75,7 @@ func (h *SettingsHandler) TestConnection(w http.ResponseWriter, r *http.Request)
 
 	// Build config from form values (not from saved config)
 	testConfig := &config.Config{
-		GatewayUrl:   r.FormValue("GATEWAY_URL"),
+		GatewayUrl: r.FormValue("GATEWAY_URL"),
 	}
 
 	if testConfig.GatewayUrl == "" {
@@ -123,6 +126,12 @@ func (h *SettingsHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cfg, err := config.Load()
+	apiKey := ""
+	if err == nil {
+		apiKey = cfg.APIKey
+	}
+
 	f, err := os.Create(".env")
 	if err != nil {
 		http.Error(w, "Failed to save .env", http.StatusInternalServerError)
@@ -132,9 +141,11 @@ func (h *SettingsHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 
 	content := fmt.Sprintf(`GATEWAY_URL=%s
 					SERVER_PORT=%s
+					API_KEY=%s
 					`,
 		r.FormValue("GATEWAY_URL"),
 		r.FormValue("SERVER_PORT"),
+		apiKey,
 	)
 
 	if _, err := f.WriteString(content); err != nil {

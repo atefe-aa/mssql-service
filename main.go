@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	"mssql-api/internal/config"
-	"mssql-api/internal/handlers"
-	"mssql-api/internal/templates"
+	"mssql-edge/internal/config"
+	"mssql-edge/internal/handlers"
+	"mssql-edge/internal/middleware"
+	"mssql-edge/internal/templates"
 )
 
 func main() {
@@ -61,17 +62,20 @@ func setupSettingsRoutes(mux *http.ServeMux) error {
 
 	settingsHandler := handlers.NewSettingsHandler(tpl)
 
-	mux.HandleFunc("/settings", settingsHandler.SettingsPage)
-	mux.HandleFunc("/settings/save", settingsHandler.SaveSettings)
-	mux.HandleFunc("/settings/test-connection", settingsHandler.TestConnection)
+	mux.HandleFunc("/settings", middleware.LocalhostOnly(settingsHandler.SettingsPage))
+	mux.HandleFunc("/settings/save", middleware.LocalhostOnly(settingsHandler.SaveSettings))
+	mux.HandleFunc("/settings/test-connection", middleware.LocalhostOnly(settingsHandler.TestConnection))
 
 	return nil
 }
 
 func setupAPIRoutes(mux *http.ServeMux, cfg *config.Config) error {
 	handler := handlers.NewHandler(cfg)
-	mux.HandleFunc("/api/barcode", handler.GetBarcodeRecords)
-	mux.HandleFunc("/api/batch/barcode", handler.GetBatchBarcodeRecords)
+	apiKeyMiddleware := middleware.APIKeyAuth(cfg.APIKey)
+	
+	mux.HandleFunc("/api/barcode", apiKeyMiddleware(handler.GetBarcodeRecords))
+	mux.HandleFunc("/api/batch/barcode", apiKeyMiddleware(handler.GetBatchBarcodeRecords))
+
 	mux.HandleFunc("/health", handler.HealthCheck)
 	return nil
 }

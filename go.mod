@@ -1,4 +1,4 @@
-module mssql-api
+module mssql-edge
 
 go 1.24.0
 
