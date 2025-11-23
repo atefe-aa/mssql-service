@@ -63,6 +63,96 @@ func (h *Handler) GetBarcodeRecords(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
+func (h *Handler) GetBatchBarcodeRecords(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "method_not_allowed",
+		})
+		return
+	}
+	var payload struct {
+		Barcodes []string `json:"barcodes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "invalid_json",
+			"details": err.Error(),
+		})
+		return
+	}
+	var xzBarcodes, otherBarcodes []string
+	for _, bc := range payload.Barcodes {
+		bc = strings.TrimSpace(bc)
+		if bc == "" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(bc), "xz") {
+			xzBarcodes = append(xzBarcodes, bc)
+		} else {
+			otherBarcodes = append(otherBarcodes, bc)
+		}
+	}
+	client := http.Client{Timeout: 15 * time.Second}
+	allRows := []map[string]interface{}{}
+	totalCount := 0
+	processBarcodes := func(barcodes []string, table string) error {
+		if len(barcodes) == 0 {
+			return nil
+		}
+
+		// Build WHERE clause
+		conditions := []string{}
+		for _, bc := range barcodes {
+			conditions = append(conditions, fmt.Sprintf("'%s'", decodeBarcode(bc)))
+		}
+		query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)", table,
+			map[bool]string{true: "Str_BarcodeAdmitNum", false: "Str_AdmitBarcodeNumber"}[table == "View_Barcode_MainTube"],
+			strings.Join(conditions, ","),
+		)
+
+		payloadBytes, _ := json.Marshal(map[string]string{"query": query})
+		resp, err := client.Post(h.cfg.GatewayUrl+"/api/query", "application/json", bytes.NewBuffer(payloadBytes))
+		if err != nil {
+			return fmt.Errorf("failed to query gateway: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("gateway returned status %d", resp.StatusCode)
+		}
+
+		var result struct {
+			Success bool                     `json:"success"`
+			Rows    []map[string]interface{} `json:"rows"`
+			Count   int                      `json:"count"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return fmt.Errorf("failed to decode gateway response: %w", err)
+		}
+
+		allRows = append(allRows, result.Rows...)
+		totalCount += result.Count
+		return nil
+	}
+	if err := processBarcodes(xzBarcodes, "View_Barcode_MainTube"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := processBarcodes(otherBarcodes, "View_Barcode_Devided"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"rows":    allRows,
+		"count":   totalCount,
+	})
+}
 
 func decodeBarcode(barcode string) string {
 	parts := strings.SplitN(barcode, "z", 2)

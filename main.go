@@ -71,6 +71,7 @@ func setupSettingsRoutes(mux *http.ServeMux) error {
 func setupAPIRoutes(mux *http.ServeMux, cfg *config.Config) error {
 	handler := handlers.NewHandler(cfg)
 	mux.HandleFunc("/api/barcode", handler.GetBarcodeRecords)
+	mux.HandleFunc("/api/batch/barcode", handler.GetBatchBarcodeRecords)
 	mux.HandleFunc("/health", handler.HealthCheck)
 	return nil
 }
