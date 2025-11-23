@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"mssql-api/internal/config"
 	"net/http"
 	"strings"
 	"time"
 )
 
 type Handler struct {
-	GatewayURL string
+	cfg *config.Config
 }
 
-func NewHandler(gatewayURL string) *Handler {
-	return &Handler{GatewayURL: strings.TrimRight(gatewayURL, "/")}
+func NewHandler(cfg *config.Config) *Handler {
+	return &Handler{cfg: cfg}
 }
 
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ func (h *Handler) GetBarcodeRecords(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]string{"query": query}
 	payloadBytes, _ := json.Marshal(payload)
 
-	resp, err := client.Post(h.GatewayURL+"/api/query", "application/json", bytes.NewBuffer(payloadBytes))
+	resp, err := client.Post(h.cfg.GatewayUrl+"/api/query", "application/json", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		http.Error(w, "failed to reach gateway: "+err.Error(), http.StatusInternalServerError)
 		return
