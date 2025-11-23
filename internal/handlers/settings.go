@@ -1,16 +1,13 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"os/user"
 	"time"
 
 	"mssql-api/internal/config"
-	"mssql-api/internal/database"
 	"mssql-api/internal/templates"
 )
 
@@ -23,9 +20,6 @@ func NewSettingsHandler(tpl *templates.Templates) *SettingsHandler {
 }
 
 type SettingsPageData struct {
-	CurrentUser       string
-	Username          string
-	Userdomain        string
 	Config            *config.Config
 	HasExistingConfig bool
 	ConfigError       string
@@ -35,9 +29,6 @@ type SettingsPageData struct {
 }
 
 func (h *SettingsHandler) SettingsPage(w http.ResponseWriter, r *http.Request) {
-	currentUser, _ := user.Current()
-	username := os.Getenv("USERNAME")
-	userdomain := os.Getenv("USERDOMAIN")
 
 	cfg, err := config.Load()
 	var currentConfig *config.Config
@@ -45,22 +36,14 @@ func (h *SettingsHandler) SettingsPage(w http.ResponseWriter, r *http.Request) {
 		currentConfig = cfg
 	} else {
 		currentConfig = &config.Config{
-			DBServer:   "",
-			DBPort:     "1433",
-			DBName:     "",
-			DBAuthMode: "windows",
-			DBUser:     "",
-			DBPassword: "",
+			GatewayUrl:   "",
 			ServerPort: "8080",
 		}
 	}
 
 	data := SettingsPageData{
-		CurrentUser:       currentUser.Username,
-		Username:          username,
-		Userdomain:        userdomain,
 		Config:            currentConfig,
-		HasExistingConfig: err == nil && currentConfig.DBName != "",
+		HasExistingConfig: err == nil && currentConfig.GatewayUrl != "",
 	}
 
 	if err != nil {
@@ -80,10 +63,7 @@ func (h *SettingsHandler) TestConnection(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	// ParseMultipartForm is needed for FormData sent via fetch
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		// Fallback to ParseForm for URL-encoded data
 		if err := r.ParseForm(); err != nil {
 			sendJSON(w, TestConnectionResponse{Success: false, Error: "Failed to parse form: " + err.Error()})
 			return
@@ -92,51 +72,40 @@ func (h *SettingsHandler) TestConnection(w http.ResponseWriter, r *http.Request)
 
 	// Build config from form values (not from saved config)
 	testConfig := &config.Config{
-		DBServer:   r.FormValue("DB_SERVER"),
-		DBPort:     r.FormValue("DB_PORT"),
-		DBName:     r.FormValue("DB_NAME"),
-		DBAuthMode: r.FormValue("DB_AUTH_MODE"),
-		DBUser:     r.FormValue("DB_USER"),
-		DBPassword: r.FormValue("DB_PASSWORD"),
-		ServerPort: r.FormValue("SERVER_PORT"),
+		GatewayUrl:   r.FormValue("GATEWAY_URL"),
 	}
 
-	// Validate required fields
-	if testConfig.DBServer == "" {
-		sendJSON(w, TestConnectionResponse{Success: false, Error: "Server is required"})
-		return
-	}
-	if testConfig.DBName == "" {
-		sendJSON(w, TestConnectionResponse{Success: false, Error: "Database name is required"})
+	if testConfig.GatewayUrl == "" {
+		sendJSON(w, TestConnectionResponse{Success: false, Error: "GATEWAY_URL cannot be empty"})
 		return
 	}
 
-	// Test the connection
-	db, err := database.NewGormDatabase(testConfig)
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Get(fmt.Sprintf("%s/health", testConfig.GatewayUrl))
 	if err != nil {
-		sendJSON(w, TestConnectionResponse{Success: false, Error: err.Error()})
+		sendJSON(w, TestConnectionResponse{Success: false, Error: "Failed to reach gateway: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		sendJSON(w, TestConnectionResponse{Success: false, Error: fmt.Sprintf("Unexpected status code: %d", resp.StatusCode)})
 		return
 	}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		sendJSON(w, TestConnectionResponse{Success: false, Error: err.Error()})
-		return
+	var body struct {
+		Status string `json:"status"`
 	}
-	defer sqlDB.Close()
-
-	// Test with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var result int
-	if err := db.WithContext(ctx).Raw("SELECT 1").Scan(&result).Error; err != nil {
-		sendJSON(w, TestConnectionResponse{Success: false, Error: err.Error()})
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		sendJSON(w, TestConnectionResponse{Success: false, Error: "Failed to parse response: " + err.Error()})
 		return
 	}
 
-	if result != 1 {
-		sendJSON(w, TestConnectionResponse{Success: false, Error: "Unexpected query result"})
+	if body.Status != "ok" {
+		sendJSON(w, TestConnectionResponse{Success: false, Error: "Unexpected response body"})
 		return
 	}
 
@@ -161,20 +130,10 @@ func (h *SettingsHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
-	content := fmt.Sprintf(`DB_SERVER=%s
-DB_PORT=%s
-DB_NAME=%s
-DB_AUTH_MODE=%s
-DB_USER=%s
-DB_PASSWORD=%s
-SERVER_PORT=%s
-`,
-		r.FormValue("DB_SERVER"),
-		r.FormValue("DB_PORT"),
-		r.FormValue("DB_NAME"),
-		r.FormValue("DB_AUTH_MODE"),
-		r.FormValue("DB_USER"),
-		r.FormValue("DB_PASSWORD"),
+	content := fmt.Sprintf(`GATEWAY_URL=%s
+					SERVER_PORT=%s
+					`,
+		r.FormValue("GATEWAY_URL"),
 		r.FormValue("SERVER_PORT"),
 	)
 

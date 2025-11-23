@@ -9,15 +9,7 @@ import (
 )
 
 type Config struct {
-	// Database configuration
-	DBServer         string
-	DBPort           string
-	DBName           string
-	DBAuthMode       string // "windows" or "sql"
-	DBUser           string // Only for SQL auth
-	DBPassword       string // Only for SQL auth
-	
-	// Server configuration
+	GatewayUrl         string
 	ServerPort       string
 }
 
@@ -25,12 +17,7 @@ func Load() (*Config, error) {
 	godotenv.Load() 
 	
 	cfg := &Config{
-		DBServer:   getEnv("DB_SERVER", "localhost"),
-		DBPort:     getEnv("DB_PORT", "1433"),
-		DBName:     getEnv("DB_NAME", ""),
-		DBAuthMode: getEnv("DB_AUTH_MODE", "windows"), // default to windows auth
-		DBUser:     getEnv("DB_USER", ""),
-		DBPassword: getEnv("DB_PASSWORD", ""),
+		GatewayUrl:   getEnv("GATEWAY_URL", "http://localhost:8080"),
 		ServerPort: getEnv("SERVER_PORT", "8080"),
 	}
 
@@ -42,18 +29,8 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
-	if c.DBName == "" {
-		return fmt.Errorf("DB_NAME is required")
-	}
-
-	if c.DBAuthMode != "windows" && c.DBAuthMode != "sql" {
-		return fmt.Errorf("DB_AUTH_MODE must be either 'windows' or 'sql'")
-	}
-
-	if c.DBAuthMode == "sql" {
-		if c.DBUser == "" || c.DBPassword == "" {
-			return fmt.Errorf("DB_USER and DB_PASSWORD are required when using SQL authentication")
-		}
+	if c.GatewayUrl == "" {
+		return fmt.Errorf("GATEWAY_URL is required")
 	}
 
 	if _, err := strconv.Atoi(c.ServerPort); err != nil {

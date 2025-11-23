@@ -7,9 +7,7 @@ import (
 	"os"
 
 	"mssql-api/internal/config"
-	"mssql-api/internal/database"
 	"mssql-api/internal/handlers"
-	"mssql-api/internal/repository"
 	"mssql-api/internal/templates"
 )
 
@@ -71,25 +69,6 @@ func setupSettingsRoutes(mux *http.ServeMux) error {
 }
 
 func setupAPIRoutes(mux *http.ServeMux, cfg *config.Config) error {
-	db, err := database.NewGormDatabase(cfg)
-	if err != nil {
-		return fmt.Errorf("database connection failed: %w", err)
-	}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get sql.DB: %w", err)
-	}
-
-	// Note: In production, handle cleanup properly
-	// defer sqlDB.Close() won't work here as it returns immediately
-
-	repo := repository.NewRepository(db)
-	handler := handlers.NewHandler(repo)
-
-	mux.HandleFunc("/health", handler.HealthCheck)
-	mux.HandleFunc("/api/barcode", handler.GetBarcodeRecords)
-
-	log.Printf("API routes registered, DB pool stats: %+v", sqlDB.Stats())
 	return nil
 }
