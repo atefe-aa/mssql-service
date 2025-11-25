@@ -91,7 +91,7 @@ func (h *Handler) GetBatchBarcodeRecords(w http.ResponseWriter, r *http.Request)
 		if bc == "" {
 			continue
 		}
-		if strings.Contains(strings.ToLower(bc), "xz") {
+		if strings.Contains(strings.ToLower(bc), "xz") || strings.Contains(strings.ToLower(bc), ".99-") {
 			xzBarcodes = append(xzBarcodes, bc)
 		} else {
 			otherBarcodes = append(otherBarcodes, bc)
@@ -110,7 +110,7 @@ func (h *Handler) GetBatchBarcodeRecords(w http.ResponseWriter, r *http.Request)
 		for _, bc := range barcodes {
 			conditions = append(conditions, fmt.Sprintf("'%s'", decodeBarcode(bc)))
 		}
-
+		
 		var query string
 		if table == "View_Barcode_MainTube" {
 			query = fmt.Sprintf(`
