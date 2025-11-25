@@ -110,11 +110,21 @@ func (h *Handler) GetBatchBarcodeRecords(w http.ResponseWriter, r *http.Request)
 		for _, bc := range barcodes {
 			conditions = append(conditions, fmt.Sprintf("'%s'", decodeBarcode(bc)))
 		}
-		query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)", table,
-			map[bool]string{true: "Str_BarcodeAdmitNum", false: "Str_AdmitBarcodeNumber"}[table == "View_Barcode_MainTube"],
-			strings.Join(conditions, ","),
-		)
 
+		var query string
+		if table == "View_Barcode_MainTube" {
+			query = fmt.Sprintf(`
+        SELECT PatientName, Str_SpecialName, Str_BarcodeAdmitNum
+        FROM View_Barcode_MainTube
+        WHERE Str_BarcodeAdmitNum IN (%s)
+    `, strings.Join(conditions, ","))
+		} else {
+			query = fmt.Sprintf(`
+        SELECT PatientName, Str_SpecialName, Str_AdmitBarcodeNumber
+        FROM View_Barcode_Devided
+        WHERE Str_AdmitBarcodeNumber IN (%s)
+    `, strings.Join(conditions, ","))
+		}
 		payloadBytes, _ := json.Marshal(map[string]string{"query": query})
 		resp, err := client.Post(h.cfg.GatewayUrl+"/api/query", "application/json", bytes.NewBuffer(payloadBytes))
 		if err != nil {
