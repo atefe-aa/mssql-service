@@ -32,7 +32,7 @@ func (h *Handler) GetBarcodeRecords(w http.ResponseWriter, r *http.Request) {
 	normalizedBarcode := strings.TrimSpace(barcode)
 
 	var query string
-	if strings.Contains(strings.ToLower(normalizedBarcode), "xz") {
+	if strings.Contains(strings.ToLower(normalizedBarcode), "xz") || strings.Contains(strings.ToLower(normalizedBarcode), ".99-") {
 		query = fmt.Sprintf(`SELECT * FROM View_Barcode_MainTube WHERE Str_BarcodeAdmitNum = '%s'`, decodeBarcode(normalizedBarcode))
 	} else {
 		query = fmt.Sprintf(`SELECT * FROM View_Barcode_Devided WHERE Str_AdmitBarcodeNumber = '%s'`, decodeBarcode(normalizedBarcode))
