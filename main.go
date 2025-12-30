@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"mssql-edge/internal/config"
-	"mssql-edge/internal/handlers"
+	"mssql-edge/internal/handler"
 	"mssql-edge/internal/middleware"
 	"mssql-edge/internal/templates"
 )
@@ -60,7 +60,7 @@ func setupSettingsRoutes(mux *http.ServeMux) error {
 		return fmt.Errorf("failed to load templates: %w", err)
 	}
 
-	settingsHandler := handlers.NewSettingsHandler(tpl)
+	settingsHandler := handler.NewSettingsHandler(tpl)
 
 	mux.HandleFunc("/settings", middleware.LocalhostOnly(settingsHandler.SettingsPage))
 	mux.HandleFunc("/settings/save", middleware.LocalhostOnly(settingsHandler.SaveSettings))
@@ -70,7 +70,7 @@ func setupSettingsRoutes(mux *http.ServeMux) error {
 }
 
 func setupAPIRoutes(mux *http.ServeMux, cfg *config.Config) error {
-	handler := handlers.NewHandler(cfg)
+	handler := handler.NewHandler(cfg)
 	apiKeyMiddleware := middleware.APIKeyAuth(cfg.APIKey)
 	
 	mux.HandleFunc("/api/barcode", apiKeyMiddleware(handler.GetBarcodeRecords))
